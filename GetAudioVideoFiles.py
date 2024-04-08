@@ -141,16 +141,14 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
 
             self.log(Level.INFO, "Processing file: " + file.getName())
             
-            
-
             # Python and transcript.py directories (TEMPORARY)
-            pythonPath = 'C:\\Users\\ernie\\AppData\\Local\\Programs\\Python\\Python312\\python.exe'
             transcriptPath = 'C:\\Users\\ernie\\AppData\\Roaming\\autopsy\\python_modules\\audio_transcript\\transcript.py'
             
             if ((file.getMIMEType() is not None) and 
                 (file.getType() != TskData.TSK_DB_FILES_TYPE_ENUM.UNALLOC_BLOCKS) and 
                 (file.getType() != TskData.TSK_DB_FILES_TYPE_ENUM.UNUSED_BLOCKS) and 
                 (file.getMIMEType().startswith("audio"))):
+                
                 fileCount += 1
                 
                 dir = Case.getCurrentCase().getTempDirectory()
@@ -163,7 +161,6 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
                     self.log(Level.INFO, "Transcribing file: " + file.getName())
                     transcriptText = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                     stdout, stderr = transcriptText.communicate()
-                    self.log(Level.INFO, "Transcribed Text: " + str(transcriptText))
                     if transcriptText.returncode != 0:
                         self.log(Level.INFO, "Error transcribing file: " + str(stderr.decode('utf-8')))
                     else:
@@ -198,11 +195,8 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
                 totLen = totLen + readLen
                 readLen = inputStream.read(buffer)
 
-            
-
-            # Update the progress bar
-            progressBar.progress(fileCount)
-
+        # Update the progress bar
+        progressBar.progress(fileCount)
 
         #Post a message to the ingest messages in box.
         message = IngestMessage.createMessage(IngestMessage.MessageType.DATA,

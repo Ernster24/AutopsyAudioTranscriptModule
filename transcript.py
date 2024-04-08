@@ -9,12 +9,13 @@ def transcribe(audio_file, file_no):
 
         try:
             text = r.recognize_google(audio_data)
+            print("Writing '" + text + "' to file...")
             return text
         except:
             return "!!!!Error Transcribing Audio!!!!"
             
 
-        #print("Writing '" + text + "' to file...")
+        
         #transcript = open("transcript.txt", "a")
         #transcript.write("[" + str(file_no) + "] " + text + "\n")
         #transcript.close()

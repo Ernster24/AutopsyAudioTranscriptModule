@@ -140,8 +140,8 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
             # Update the progress bar
             progressBar.progress(fileCount)
             
-            # Python and Transcribe.py directories (TEMPORARY)
-            transcriptPath = 'C:\\Users\\ernie\\AppData\\Roaming\\autopsy\\python_modules\\AutopsyAudioTranscriptModule\\Transcribe.py'
+            # Get Transcribe.py directory
+            transcriptPath = os.path.join(os.getenv("APPDATA") + "\\autopsy\\python_modules\\AutopsyAudioTranscriptModule\\Transcribe.py")
             
             # Skip unallocated and unused blocks
             if ((file.getMIMEType() is not None) and 
@@ -159,21 +159,21 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
                     self.log(Level.INFO, "Transcribing file: " + fileName)
                     result = transcribeAudioFile(command)
                     self.log(Level.INFO, str(result))
+                    '''
+                    # If video file is selected, convert to audio file then run through transcription program
+                    elif (file.getMIMEType().startswith("video")):
+                        fileCount += 1
+                        self.log(Level.INFO, "FILE " + fileName + " IS A VIDEO FILE")
+                        filePath = createTempFile(file)
 
-                # If video file is selected, convert to audio file then run through transcription program
-                elif (file.getMIMEType().startswith("video")):
-                    fileCount += 1
-                    self.log(Level.INFO, "FILE " + fileName + " IS A VIDEO FILE")
-                    filePath = createTempFile(file)
-
-                    # Convert video file to audio file
-                    newAudioFilePath = convertVideoFile(fileName, filePath)
-                    command = ['python3', transcriptPath, str(newAudioFilePath), str(fileCount)]
-                    
-                    self.log(Level.INFO, "Transcribing file: " + fileName)
-                    result = transcribeAudioFile(command)
-                    self.log(Level.INFO, str(result))
-
+                        # Convert video file to audio file
+                        newAudioFilePath = convertVideoFile(fileName, filePath)
+                        command = ['python3', transcriptPath, str(newAudioFilePath), str(fileCount)]
+                        
+                        self.log(Level.INFO, "Transcribing file: " + fileName)
+                        result = transcribeAudioFile(command)
+                        self.log(Level.INFO, str(result))
+                    '''
                 else:
                     continue
 

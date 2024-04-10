@@ -8,6 +8,7 @@ from org.sleuthkit.autopsy.casemodule import Case
 from org.sleuthkit.autopsy.casemodule.services import FileManager
 
 
+# Opens a temporary directory and copies the selected file into it
 def createTempFile(file):
     dir = Case.getCurrentCase().getTempDirectory()
     filePath = os.path.join(dir, file.getName())
@@ -15,7 +16,8 @@ def createTempFile(file):
 
     return filePath
 
-
+# Transcribes an audio file
+# The 'command' argument consists of a shell command which runs 'transcript.py' using python3 
 def transcribeAudioFile(command):
     try:
         transcriptText = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -29,3 +31,15 @@ def transcribeAudioFile(command):
     except OSError as e:
         result = "Error transcribing audio file: " + str(e)
         return result
+
+
+def convertVideoFile(fileName, filePath):
+    name, extension = os.path.splitext(fileName)
+    newAudioFileName = (name + '.wav')
+    newAudioFilePath = filePath.replace(fileName, newAudioFileName)
+    
+    try:
+        subprocess.check_call(["ffmpeg", "-i", filePath, "-vn", newAudioFilePath])
+        return newAudioFilePath
+    except subprocess.CalledProcessError as e:
+        return ("Error during ffmpeg conversion: ", e)

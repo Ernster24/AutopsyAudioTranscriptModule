@@ -169,21 +169,19 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
                     self.log(Level.INFO, "FILE " + fileName + " IS A VIDEO FILE")
                     filePath = createTempFile(file)
 
+                    newAudioFilePath = convertVideoFile(fileName, filePath)
+                    command = ['python3', transcriptPath, str(newAudioFilePath), str(fileCount)]
+
+                    self.log(Level.INFO, "Transcribing file: " + fileName)
+                    result = transcribeAudioFile(command)
+                    self.log(Level.INFO, str(result))
                     
+                    # Update the progress bar
+                    progressBar.progress(fileCount)
 
                 else:
                     continue
 
-                '''
-
-                dir = Case.getCurrentCase().getTempDirectory()
-                filePath = os.path.join(dir, file.getName())
-                ContentUtils.writeToFile(file, File(filePath))
-                
-                
-                
-                
-                    '''
             else:
                 continue
             

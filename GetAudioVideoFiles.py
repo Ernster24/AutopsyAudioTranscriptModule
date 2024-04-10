@@ -117,21 +117,15 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
     # TODO: Add your analysis code in here.
     def process(self, dataSource, progressBar):
 
-        # we don't know how much work there is yet
-        progressBar.switchToIndeterminate()
-
         # Use blackboard class to index blackboard artifacts for keyword search
         blackboard = Case.getCurrentCase().getSleuthkitCase().getBlackboard()
 
-        # For our example, we will use FileManager to get all
-        # files with the word "test"
-        # in the name and then count and read them
-        # FileManager API: http://sleuthkit.org/autopsy/docs/api-docs/latest/classorg_1_1sleuthkit_1_1autopsy_1_1casemodule_1_1services_1_1_file_manager.html
+        # Get all files from case
         fileManager = Case.getCurrentCase().getServices().getFileManager()
         files = fileManager.findFiles(dataSource, "%")
 
         numFiles = len(files)
-        self.log(Level.INFO, "found " + str(numFiles) + " files")
+        self.log(Level.INFO, "Found " + str(numFiles) + " files")
         progressBar.switchToDeterminate(numFiles)
         fileCount = 0
         for file in files:
@@ -142,14 +136,19 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
 
             fileName = file.getName()
             self.log(Level.INFO, "Processing file: " + fileName)
+
+            # Update the progress bar
+            progressBar.progress(fileCount)
             
-            # Python and transcript.py directories (TEMPORARY)
-            transcriptPath = 'C:\\Users\\ernie\\AppData\\Roaming\\autopsy\\python_modules\\AutopsyAudioTranscriptModule\\transcript.py'
+            # Python and Transcribe.py directories (TEMPORARY)
+            transcriptPath = 'C:\\Users\\ernie\\AppData\\Roaming\\autopsy\\python_modules\\AutopsyAudioTranscriptModule\\Transcribe.py'
             
+            # Skip unallocated and unused blocks
             if ((file.getMIMEType() is not None) and 
                 (file.getType() != TskData.TSK_DB_FILES_TYPE_ENUM.UNALLOC_BLOCKS) and 
                 (file.getType() != TskData.TSK_DB_FILES_TYPE_ENUM.UNUSED_BLOCKS)):
 
+                # If audio file is selected, run through transcription program
                 if (file.getMIMEType().startswith("audio")):
                     fileCount += 1
                     self.log(Level.INFO, "FILE " + fileName + " IS AN AUDIO FILE")
@@ -161,23 +160,19 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
                     result = transcribeAudioFile(command)
                     self.log(Level.INFO, str(result))
 
-                    # Update the progress bar
-                    progressBar.progress(fileCount)
-
+                # If video file is selected, convert to audio file then run through transcription program
                 elif (file.getMIMEType().startswith("video")):
                     fileCount += 1
                     self.log(Level.INFO, "FILE " + fileName + " IS A VIDEO FILE")
                     filePath = createTempFile(file)
 
+                    # Convert video file to audio file
                     newAudioFilePath = convertVideoFile(fileName, filePath)
                     command = ['python3', transcriptPath, str(newAudioFilePath), str(fileCount)]
-
+                    
                     self.log(Level.INFO, "Transcribing file: " + fileName)
                     result = transcribeAudioFile(command)
                     self.log(Level.INFO, str(result))
-                    
-                    # Update the progress bar
-                    progressBar.progress(fileCount)
 
                 else:
                     continue

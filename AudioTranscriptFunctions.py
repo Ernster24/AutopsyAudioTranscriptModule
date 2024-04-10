@@ -1,3 +1,4 @@
+# Imports
 import os
 import subprocess
 from java.lang import System
@@ -17,7 +18,7 @@ def createTempFile(file):
     return filePath
 
 # Transcribes an audio file
-# The 'command' argument consists of a shell command which runs 'transcript.py' using python3 
+# The 'command' argument consists of a shell command which runs Transcribe.py using python3 
 def transcribeAudioFile(command):
     try:
         transcriptText = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -32,7 +33,7 @@ def transcribeAudioFile(command):
         result = "Error transcribing audio file: " + str(e)
         return result
 
-
+# Converts video file to audio file (.wav) using ffmpeg
 def convertVideoFile(fileName, filePath):
     name, extension = os.path.splitext(fileName)
     newAudioFileName = (name + '.wav')

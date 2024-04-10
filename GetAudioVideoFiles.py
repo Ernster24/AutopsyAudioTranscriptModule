@@ -60,6 +60,7 @@ from org.sleuthkit.autopsy.casemodule.services import FileManager
 from org.sleuthkit.autopsy.casemodule.services import Blackboard
 from org.sleuthkit.datamodel import Score
 from java.util import Arrays
+from AudioTranscriptFunctions import *
 
 # Factory that defines the name and details of the module and allows Autopsy
 # to create instances of the modules that will do the analysis.
@@ -139,34 +140,50 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
             if self.context.isJobCancelled():
                 return IngestModule.ProcessResult.OK
 
-            self.log(Level.INFO, "Processing file: " + file.getName())
+            fileName = file.getName()
+            self.log(Level.INFO, "Processing file: " + fileName)
             
             # Python and transcript.py directories (TEMPORARY)
-            transcriptPath = 'C:\\Users\\ernie\\AppData\\Roaming\\autopsy\\python_modules\\audio_transcript\\transcript.py'
+            transcriptPath = 'C:\\Users\\ernie\\AppData\\Roaming\\autopsy\\python_modules\\AutopsyAudioTranscriptModule\\transcript.py'
             
             if ((file.getMIMEType() is not None) and 
                 (file.getType() != TskData.TSK_DB_FILES_TYPE_ENUM.UNALLOC_BLOCKS) and 
-                (file.getType() != TskData.TSK_DB_FILES_TYPE_ENUM.UNUSED_BLOCKS) and 
-                (file.getMIMEType().startswith("audio"))):
-                
-                fileCount += 1
-                
+                (file.getType() != TskData.TSK_DB_FILES_TYPE_ENUM.UNUSED_BLOCKS)):
+
+                if (file.getMIMEType().startswith("audio")):
+                    fileCount += 1
+                    self.log(Level.INFO, "FILE " + fileName + " IS AN AUDIO FILE")
+                    filePath = createTempFile(file)
+
+                    command = ['python3', transcriptPath, str(filePath), str(fileCount)]
+
+                    self.log(Level.INFO, "Transcribing file: " + fileName)
+                    result = transcribeAudioFile(command)
+                    self.log(Level.INFO, str(result))
+
+                    # Update the progress bar
+                    progressBar.progress(fileCount)
+
+                elif (file.getMIMEType().startswith("video")):
+                    fileCount += 1
+                    self.log(Level.INFO, "FILE " + fileName + " IS A VIDEO FILE")
+                    filePath = createTempFile(file)
+
+                    
+
+                else:
+                    continue
+
+                '''
+
                 dir = Case.getCurrentCase().getTempDirectory()
                 filePath = os.path.join(dir, file.getName())
                 ContentUtils.writeToFile(file, File(filePath))
                 
-                self.log(Level.INFO, "FILE " + file.getName() + " IS AN AUDIO FILE")
-                command = ['python3', transcriptPath, str(filePath), str(fileCount)]
-                try:
-                    self.log(Level.INFO, "Transcribing file: " + file.getName())
-                    transcriptText = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    stdout, stderr = transcriptText.communicate()
-                    if transcriptText.returncode != 0:
-                        self.log(Level.INFO, "Error transcribing file: " + str(stderr.decode('utf-8')))
-                    else:
-                        self.log(Level.INFO, "File transcribed successfully: " + str(stdout.decode('utf-8')))
-                except OSError as e:
-                    self.log(Level.INFO, "Error transcribing audio file: " + str(e))
+                
+                
+                
+                    '''
             else:
                 continue
             
@@ -195,8 +212,7 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
                 totLen = totLen + readLen
                 readLen = inputStream.read(buffer)
 
-        # Update the progress bar
-        progressBar.progress(fileCount)
+        
 
         #Post a message to the ingest messages in box.
         message = IngestMessage.createMessage(IngestMessage.MessageType.DATA,

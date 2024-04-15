@@ -35,6 +35,7 @@ import jarray
 import inspect
 import subprocess
 import os
+import csv
 from java.lang import System
 from java.util.logging import Level
 from java.io import File
@@ -53,6 +54,7 @@ from org.sleuthkit.autopsy.ingest import FileIngestModule
 from org.sleuthkit.autopsy.ingest import IngestModuleFactoryAdapter
 from org.sleuthkit.autopsy.ingest import IngestMessage
 from org.sleuthkit.autopsy.ingest import IngestServices
+from org.sleuthkit.autopsy.ingest import IngestJobContext
 from org.sleuthkit.autopsy.coreutils import Logger
 from org.sleuthkit.autopsy.casemodule import Case
 from org.sleuthkit.autopsy.casemodule.services import Services
@@ -61,6 +63,22 @@ from org.sleuthkit.autopsy.casemodule.services import Blackboard
 from org.sleuthkit.datamodel import Score
 from java.util import Arrays
 from AudioTranscriptFunctions import *
+
+
+
+'''             
+artifact = csvFileName.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_INTERESTING_FILE_HIT)
+attribute = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SET_NAME, AudioTranscriptIngestModuleFactory.moduleName, "TRANSCRIBED FILE")
+try:
+    artifact.addAttribute(attribute)
+    blackboard.postArtifact(artifact, AudioTranscriptIngestModuleFactory.moduleName, self.context.getJobId())
+    self.log(Level.INFO, "Artifact added to BlackBoard: " + artifact.getDisplayName())
+except Blackboard.BlackboardException as e:
+    self.log(Level.SEVERE, "Error indexing artifact: " + artifact.getDisplayName())
+'''  
+
+
+
 
 # Factory that defines the name and details of the module and allows Autopsy
 # to create instances of the modules that will do the analysis.
@@ -117,12 +135,11 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
     # TODO: Add your analysis code in here.
     def process(self, dataSource, progressBar):
 
-        # Use blackboard class to index blackboard artifacts for keyword search
-        blackboard = Case.getCurrentCase().getSleuthkitCase().getBlackboard()
-
         # Get all files from case
         fileManager = Case.getCurrentCase().getServices().getFileManager()
         files = fileManager.findFiles(dataSource, "%")
+
+        blackboard = Case.getCurrentCase().getSleuthkitCase().getBlackboard()
 
         numFiles = len(files)
         self.log(Level.INFO, "Found " + str(numFiles) + " files")
@@ -155,27 +172,36 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
                     filePath = createTempFile(file)
 
                     command = ['python3', transcriptPath, str(filePath), str(fileCount)]
+                    
+                # If video file is selected, convert to audio file then run through transcription program
+                elif (file.getMIMEType().startswith("video")):
+                    fileCount += 1
+                    self.log(Level.INFO, "FILE " + fileName + " IS A VIDEO FILE")
+                    filePath = createTempFile(file)
 
-                    self.log(Level.INFO, "Transcribing file: " + fileName)
-                    result = transcribeAudioFile(command)
-                    self.log(Level.INFO, str(result))
-                    '''
-                    # If video file is selected, convert to audio file then run through transcription program
-                    elif (file.getMIMEType().startswith("video")):
-                        fileCount += 1
-                        self.log(Level.INFO, "FILE " + fileName + " IS A VIDEO FILE")
-                        filePath = createTempFile(file)
+                    # Convert video file to audio file
+                    newAudioFilePath = convertVideoFile(fileName, filePath)
+                    command = ['python3', transcriptPath, str(newAudioFilePath), str(fileCount)]
 
-                        # Convert video file to audio file
-                        newAudioFilePath = convertVideoFile(fileName, filePath)
-                        command = ['python3', transcriptPath, str(newAudioFilePath), str(fileCount)]
-                        
-                        self.log(Level.INFO, "Transcribing file: " + fileName)
-                        result = transcribeAudioFile(command)
-                        self.log(Level.INFO, str(result))
-                    '''
                 else:
                     continue
+
+
+                self.log(Level.INFO, "Transcribing file: " + fileName)
+                result = transcribeAudioFile(command)
+                self.log(Level.INFO, "File transcribed successfully: " + str(result))
+
+                name, extension = os.path.splitext(filePath)
+                csvFileName = str(name + '.csv')
+                with open(csvFileName, 'w') as file:
+                    writer = csv.writer(file)
+                    field = ["Original File", "Transcribed Text"]
+
+                    writer.writerow(field)
+                    writer.writerow([fileName, str(result)])
+                
+                self.log(Level.INFO, "WROTE TO CSV FILE: " + csvFileName)
+
 
             else:
                 continue
@@ -195,16 +221,6 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
                 self.log(Level.SEVERE, "Error indexing artifact " + art.getDisplayName())
             
             '''
-            
-            # To further the example, this code will read the contents of the file and count the number of bytes
-            inputStream = ReadContentInputStream(file)
-            buffer = jarray.zeros(1024, "b")
-            totLen = 0
-            readLen = inputStream.read(buffer)
-            while (readLen != -1):
-                totLen = totLen + readLen
-                readLen = inputStream.read(buffer)
-
         
 
         #Post a message to the ingest messages in box.

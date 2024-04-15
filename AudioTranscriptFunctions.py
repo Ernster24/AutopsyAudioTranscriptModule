@@ -27,7 +27,7 @@ def transcribeAudioFile(command):
             result = "Error transcribing file: " + str(stderr.decode('utf-8'))
             return result
         else:
-            result = "File transcribed successfully: " + str(stdout.decode('utf-8'))
+            result = str(stdout.decode('utf-8'))
             return result
     except OSError as e:
         result = "Error transcribing audio file: " + str(e)

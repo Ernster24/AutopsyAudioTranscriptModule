@@ -54,7 +54,6 @@ from org.sleuthkit.autopsy.ingest import FileIngestModule
 from org.sleuthkit.autopsy.ingest import IngestModuleFactoryAdapter
 from org.sleuthkit.autopsy.ingest import IngestMessage
 from org.sleuthkit.autopsy.ingest import IngestServices
-from org.sleuthkit.autopsy.ingest import IngestJobContext
 from org.sleuthkit.autopsy.coreutils import Logger
 from org.sleuthkit.autopsy.casemodule import Case
 from org.sleuthkit.autopsy.casemodule.services import Services
@@ -63,21 +62,6 @@ from org.sleuthkit.autopsy.casemodule.services import Blackboard
 from org.sleuthkit.datamodel import Score
 from java.util import Arrays
 from AudioTranscriptFunctions import *
-
-
-
-'''             
-artifact = csvFileName.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_INTERESTING_FILE_HIT)
-attribute = BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SET_NAME, AudioTranscriptIngestModuleFactory.moduleName, "TRANSCRIBED FILE")
-try:
-    artifact.addAttribute(attribute)
-    blackboard.postArtifact(artifact, AudioTranscriptIngestModuleFactory.moduleName, self.context.getJobId())
-    self.log(Level.INFO, "Artifact added to BlackBoard: " + artifact.getDisplayName())
-except Blackboard.BlackboardException as e:
-    self.log(Level.SEVERE, "Error indexing artifact: " + artifact.getDisplayName())
-'''  
-
-
 
 
 # Factory that defines the name and details of the module and allows Autopsy
@@ -140,6 +124,20 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
         files = fileManager.findFiles(dataSource, "%")
 
         blackboard = Case.getCurrentCase().getSleuthkitCase().getBlackboard()
+        artId = blackboard.getOrAddArtifactType("TSK_TRANSCRIBED_TEXT", "Transcribed Text")
+        attrId = blackboard.getOrAddAttributeType("TSK_TRANSCRIPT_ATTR", BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Transcription")
+        
+        # Get Transcribe.py directory
+        transcriptPath = os.path.join(os.getenv("APPDATA") + "\\autopsy\\python_modules\\AutopsyAudioTranscriptModule\\Transcribe.py")
+        
+        dir = Case.getCurrentCase().getTempDirectory()
+        csvFileName = os.path.join(dir, 'transcription.csv')
+        with open(csvFileName, 'w') as writeCSVFile:
+            writer = csv.writer(writeCSVFile)
+            field = ["File Number", "Original File", "Transcribed Text"]
+            writer.writerow(field)
+        
+        self.log(Level.INFO, "CSV file created: transcription.csv")
 
         numFiles = len(files)
         self.log(Level.INFO, "Found " + str(numFiles) + " files")
@@ -157,9 +155,6 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
             # Update the progress bar
             progressBar.progress(fileCount)
             
-            # Get Transcribe.py directory
-            transcriptPath = os.path.join(os.getenv("APPDATA") + "\\autopsy\\python_modules\\AutopsyAudioTranscriptModule\\Transcribe.py")
-            
             # Skip unallocated and unused blocks
             if ((file.getMIMEType() is not None) and 
                 (file.getType() != TskData.TSK_DB_FILES_TYPE_ENUM.UNALLOC_BLOCKS) and 
@@ -172,7 +167,7 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
                     filePath = createTempFile(file)
 
                     command = ['python3', transcriptPath, str(filePath), str(fileCount)]
-                    
+                
                 # If video file is selected, convert to audio file then run through transcription program
                 elif (file.getMIMEType().startswith("video")):
                     fileCount += 1
@@ -189,39 +184,53 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
 
                 self.log(Level.INFO, "Transcribing file: " + fileName)
                 result = transcribeAudioFile(command)
-                self.log(Level.INFO, "File transcribed successfully: " + str(result))
+                self.log(Level.INFO, "Result: " + str(result))
 
-                name, extension = os.path.splitext(filePath)
-                csvFileName = str(name + '.csv')
-                with open(csvFileName, 'w') as file:
-                    writer = csv.writer(file)
-                    field = ["Original File", "Transcribed Text"]
+                artifact = file.newArtifact(artId.getTypeID())
+                attribute = BlackboardAttribute(attrId, AudioTranscriptIngestModuleFactory.moduleName, str(result))
 
-                    writer.writerow(field)
-                    writer.writerow([fileName, str(result)])
+                try:
+                    artifact.addAttribute(attribute)
+                except:
+                    self.log(Level.SEVERE, "Error adding attribute to artifact.")
                 
-                self.log(Level.INFO, "WROTE TO CSV FILE: " + csvFileName)
+                try:
+                    blackboard.postArtifact(artifact, AudioTranscriptIngestModuleFactory.moduleName)
+                except:
+                    self.log(Level.SEVERE, "Error posting artifact to BlackBoard.")
 
+                with open(csvFileName, 'a') as writeCSVFile:
+                    writer = csv.writer(writeCSVFile)
+                    writer.writerow([fileCount, fileName, result])                
 
             else:
                 continue
-            
-            # Make an artifact on the blackboard.  TSK_INTERESTING_FILE_HIT is a generic type of
-            # artifact.  Refer to the developer docs for other examples.
-            '''
-            attrs = Arrays.asList(BlackboardAttribute(BlackboardAttribute.Type.TSK_SET_NAME,
-                                                      AudioTranscriptIngestModuleFactory.moduleName,
-                                                      "Test file"))
-            art = file.newAnalysisResult(BlackboardArtifact.Type.TSK_INTERESTING_FILE_HIT, Score.SCORE_LIKELY_NOTABLE,
-                                         None, "Test file", None, attrs).getAnalysisResult()
 
-            try:
-                blackboard.postArtifact(art, AudioTranscriptIngestModuleFactory.moduleName, context.getJobId())
-            except Blackboard.BlackboardException as e:
-                self.log(Level.SEVERE, "Error indexing artifact " + art.getDisplayName())
-            
-            '''
+        '''
+        transcriptionList = []
+        with open(csvFileName, 'rb') as readCSVFile:
+            reader = csv.reader(readCSVFile)
+            for row in reader:
+                transcriptionList.append(row)
+
+        self.log(Level.INFO, "TRANSCRIPTION LIST: " + str(transcriptionList))
+
         
+        for n in range (1, fileCount):
+            postFileName = transcriptionList[n][1]
+            postFileNo = transcriptionList[n][0]
+            postFileTranscript = transcriptionList[n]
+
+            attr = BlackboardAttribute(BlackboardAttribute.Type.TSK_TEXT, AudioTranscriptIngestModuleFactory.moduleName, str(postFileTranscript))
+            for file in artifactList:
+                art = file.newArtifact(BlackboardArtifact.Type.TSK_EXTRACTED_TEXT)
+                art.addAttribute(attr)
+                try:
+                    blackboard.indexArtifact(art)
+                    self.log(Level.INFO, "ARTIFACT SUCCESSFULLY INDEXED")
+                except:
+                    self.log(Level.SEVERE, "ERROR INDEXING ARTIFACT")
+        '''
 
         #Post a message to the ingest messages in box.
         message = IngestMessage.createMessage(IngestMessage.MessageType.DATA,

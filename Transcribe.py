@@ -1,23 +1,24 @@
 import speech_recognition as speech
+import os
 import sys
 
+modulePath = os.path.join(os.getenv("APPDATA") + "\\autopsy\\python_modules\\AutopsyAudioTranscriptModule")
+os.chdir(modulePath)
 r = speech.Recognizer()
 
-def transcribe(audio_file, file_no):
-    with speech.AudioFile(audio_file) as source:
+def transcribe(filePath, fileNo):
+    with speech.AudioFile(filePath) as source:
         audio_data = r.record(source)
-
         try:
-            # Google Web Speech API
-            text = r.recognize_google(audio_data)
+            # Vosk Speech API
+            text = r.recognize_vosk(audio_data)
             print(text)
             return text
         except:
             return "Error Transcribing Audio!"
 
 if __name__ == "__main__":
-    audio_file = sys.argv[1]
-    file_no = sys.argv[2]
+    filePath = sys.argv[1]
+    fileNo = sys.argv[2]
     
-    transcribe(audio_file, file_no)
-  
+    transcribe(filePath, fileNo)

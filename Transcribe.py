@@ -12,8 +12,13 @@ def transcribe(filePath, fileNo):
         try:
             # Vosk Speech API
             text = r.recognize_vosk(audio_data)
-            print(text)
-            return text
+
+            # Format output string to only include the transcribed text
+            textStart = text.find(':')
+            textEnd = text.rfind('"')
+            newText = text[textStart + 3:textEnd]
+            print(newText)
+            return newText
         except:
             return "Error Transcribing Audio!"
 

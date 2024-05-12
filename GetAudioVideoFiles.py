@@ -36,6 +36,7 @@ import inspect
 import subprocess
 import os
 import csv
+import time
 from java.lang import System
 from java.util.logging import Level
 from java.io import File
@@ -119,6 +120,8 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
     # TODO: Add your analysis code in here.
     def process(self, dataSource, progressBar):
 
+        progressBar.switchToIndeterminate()
+
         # Get all files from case
         fileManager = Case.getCurrentCase().getServices().getFileManager()
         files = fileManager.findFiles(dataSource, "%")
@@ -129,20 +132,13 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
         
         # Get Transcribe.py directory
         transcriptPath = os.path.join(os.getenv("APPDATA") + "\\autopsy\\python_modules\\AutopsyAudioTranscriptModule\\Transcribe.py")
-        
-        dir = Case.getCurrentCase().getTempDirectory()
-        csvFileName = os.path.join(dir, 'transcription.csv')
-        with open(csvFileName, 'w') as writeCSVFile:
-            writer = csv.writer(writeCSVFile)
-            field = ["File Number", "Original File", "Transcribed Text"]
-            writer.writerow(field)
-        
-        self.log(Level.INFO, "CSV file created: transcription.csv")
 
         numFiles = len(files)
         self.log(Level.INFO, "Found " + str(numFiles) + " files")
         progressBar.switchToDeterminate(numFiles)
-        fileCount = 0
+        fileCount = 0   # Incremented for audio and video files
+        transcriptionTimes = [] # Store the times taken to transcribe each file
+
         for file in files:
 
             # Check if the user pressed cancel while we were busy
@@ -151,9 +147,6 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
 
             fileName = file.getName()
             self.log(Level.INFO, "Processing file: " + fileName)
-
-            # Update the progress bar
-            progressBar.progress(fileCount)
             
             # Skip unallocated and unused blocks
             if ((file.getMIMEType() is not None) and 
@@ -162,14 +155,17 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
 
                 # If audio file is selected, run through transcription program
                 if (file.getMIMEType().startswith("audio")):
+                    startTime = time.time()
                     fileCount += 1
+
                     self.log(Level.INFO, "FILE " + fileName + " IS AN AUDIO FILE")
                     filePath = createTempFile(file)
 
                     command = ['python3', transcriptPath, str(filePath), str(fileCount)]
-                
+
                 # If video file is selected, convert to audio file then run through transcription program
                 elif (file.getMIMEType().startswith("video")):
+                    startTime = time.time()
                     fileCount += 1
                     self.log(Level.INFO, "FILE " + fileName + " IS A VIDEO FILE")
                     filePath = createTempFile(file)
@@ -181,57 +177,38 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
                 else:
                     continue
 
-
                 self.log(Level.INFO, "Transcribing file: " + fileName)
                 result = transcribeAudioFile(command)
+                
+                # Calculate time taken to transcribe the file
+                endTime = time.time()
+                timeTaken = endTime - startTime
+                self.log(Level.INFO, "TRANSCRIPTION TIME FOR " + fileName + " WAS " + str(timeTaken) + " SECONDS")
+                transcriptionTimes.append(timeTaken)
                 self.log(Level.INFO, "Result: " + str(result))
 
+                # Post the transcribed file as an artifact to the Blackboard
                 artifact = file.newArtifact(artId.getTypeID())
                 attribute = BlackboardAttribute(attrId, AudioTranscriptIngestModuleFactory.moduleName, str(result))
-
                 try:
                     artifact.addAttribute(attribute)
                 except:
                     self.log(Level.SEVERE, "Error adding attribute to artifact.")
-                
                 try:
                     blackboard.postArtifact(artifact, AudioTranscriptIngestModuleFactory.moduleName)
                 except:
-                    self.log(Level.SEVERE, "Error posting artifact to BlackBoard.")
-
-                with open(csvFileName, 'a') as writeCSVFile:
-                    writer = csv.writer(writeCSVFile)
-                    writer.writerow([fileCount, fileName, result])                
+                    self.log(Level.SEVERE, "Error posting artifact to BlackBoard.")             
 
             else:
                 continue
+            
+            # Update the progress bar
+            progressBar.progress(files.index(file))
 
-        '''
-        transcriptionList = []
-        with open(csvFileName, 'rb') as readCSVFile:
-            reader = csv.reader(readCSVFile)
-            for row in reader:
-                transcriptionList.append(row)
-
-        self.log(Level.INFO, "TRANSCRIPTION LIST: " + str(transcriptionList))
-
+        totalTime = sum(transcriptionTimes)
+        self.log(Level.INFO, "Number of files transcribed: " + str(fileCount))
+        self.log(Level.INFO, "Total Transcription time was " + str(totalTime) + " seconds.")
         
-        for n in range (1, fileCount):
-            postFileName = transcriptionList[n][1]
-            postFileNo = transcriptionList[n][0]
-            postFileTranscript = transcriptionList[n]
-
-            attr = BlackboardAttribute(BlackboardAttribute.Type.TSK_TEXT, AudioTranscriptIngestModuleFactory.moduleName, str(postFileTranscript))
-            for file in artifactList:
-                art = file.newArtifact(BlackboardArtifact.Type.TSK_EXTRACTED_TEXT)
-                art.addAttribute(attr)
-                try:
-                    blackboard.indexArtifact(art)
-                    self.log(Level.INFO, "ARTIFACT SUCCESSFULLY INDEXED")
-                except:
-                    self.log(Level.SEVERE, "ERROR INDEXING ARTIFACT")
-        '''
-
         #Post a message to the ingest messages in box.
         message = IngestMessage.createMessage(IngestMessage.MessageType.DATA,
             "Audio Transcript Ingest Module", "Found %d files" % fileCount)

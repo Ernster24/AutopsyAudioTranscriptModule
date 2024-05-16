@@ -53,7 +53,6 @@ class AudioTranscriptIngestModuleFactory(IngestModuleFactoryAdapter):
         return True
 
     def createDataSourceIngestModule(self, ingestOptions):
-        # TODO: Change the class name to the name you'll make below
         return AudioTranscriptIngestModule()
 
 
@@ -88,19 +87,22 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
         # Get all files from case
         fileManager = Case.getCurrentCase().getServices().getFileManager()
         files = fileManager.findFiles(dataSource, "%")
-
+        numFiles = len(files)
+        self.log(Level.INFO, "Found " + str(numFiles) + " files")
+        
+        # Intialise the blackboard, including artifacts and atrributes
         blackboard = Case.getCurrentCase().getSleuthkitCase().getBlackboard()
         artId = blackboard.getOrAddArtifactType("TSK_TRANSCRIBED_TEXT", "Transcribed Text")
-        attrId = blackboard.getOrAddAttributeType("TSK_TRANSCRIPT_ATTR", BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Transcription")
+        attrId = blackboard.getOrAddAttributeType("TSK_TRANSCRIPT_ATTR", 
+                                                  BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Transcription")
         
         # Get Transcribe.py directory
         transcriptPath = os.path.join(os.getenv("APPDATA") + "\\autopsy\\python_modules\\AutopsyAudioTranscriptModule\\Transcribe.py")
-
-        numFiles = len(files)
-        self.log(Level.INFO, "Found " + str(numFiles) + " files")
-        progressBar.switchToDeterminate(numFiles)
+        
+        progressBar.switchToDeterminate(numFiles)   # Total work units for the progress bar is the number of files
         fileCount = 0   # Incremented for audio and video files
         transcriptionTimes = [] # Store the times taken to transcribe each file
+        isVideo = False
 
         for file in files:
 
@@ -118,34 +120,31 @@ class AudioTranscriptIngestModule(DataSourceIngestModule):
 
                 # If audio file is selected, run through transcription program
                 if (file.getMIMEType().startswith("audio")):
-                    startTime = time.time()
                     fileCount += 1
-
                     self.log(Level.INFO, "FILE " + fileName + " IS AN AUDIO FILE")
                     filePath = createTempFile(file)
-
-                    command = ['python3', transcriptPath, str(filePath), str(fileCount)]
+                
+                    # Convert file to .wav
+                    newAudioFilePath = convertFile(fileName, filePath, isVideo)
+                    command = ['python3', transcriptPath, str(newAudioFilePath), str(fileCount)]
 
                 # If video file is selected, convert to audio file then run through transcription program
                 elif (file.getMIMEType().startswith("video")):
-                    startTime = time.time()
                     fileCount += 1
                     self.log(Level.INFO, "FILE " + fileName + " IS A VIDEO FILE")
                     filePath = createTempFile(file)
+                    isVideo = True
 
                     # Convert video file to audio file
-                    newAudioFilePath = convertVideoFile(fileName, filePath)
+                    newAudioFilePath = convertFile(fileName, filePath, isVideo)
                     command = ['python3', transcriptPath, str(newAudioFilePath), str(fileCount)]
 
                 else:
                     continue
 
                 self.log(Level.INFO, "Transcribing file: " + fileName)
-                result = transcribeAudioFile(command)
+                result, timeTaken = transcribeAudioFile(command) 
                 
-                # Calculate time taken to transcribe the file
-                endTime = time.time()
-                timeTaken = endTime - startTime
                 self.log(Level.INFO, "TRANSCRIPTION TIME FOR " + fileName + " WAS " + str(timeTaken) + " SECONDS")
                 transcriptionTimes.append(timeTaken)
                 self.log(Level.INFO, "Result: " + str(result))
